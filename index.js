@@ -21,6 +21,95 @@ function toTitleCase(str) {
     .join(" ");
 }
 
+// Formata a reserva para maior entendimento
+function formatReservation(reservation) {
+  let localTranslator = {
+    aeroporto: "Aeroporto",
+    funchal: "Funchal",
+    "santa-cruz": "Santa Cruz",
+    "porto-moniz": "Porto Moniz",
+    "sao-vicente": "São Vicente",
+    santana: "Santana",
+    calheta: "Calheta",
+    "ponta-do-sol": "Ponta do Sol",
+    "ribeira-brava": "Ribeira Brava",
+    "camara-de-lobos": "Câmara de Lobos",
+    machico: "Machico",
+    canico: "Caniço",
+  };
+  let vehicleTranslator = {
+    a1: "Panda",
+    a2: "Up",
+    a3: "5null",
+    b1: "Spacestar",
+    c1: "Clio",
+    c2: "Sandero",
+  };
+
+  const newNotionOperation = {
+    id: null,
+    grupo: null,
+    anyrent: null,
+    voo: null,
+    extras: {
+      cadeiras: null,
+      assentos: null,
+    },
+    cliente: {
+      nome: null,
+      pais: null,
+      whatsapp: null,
+    },
+    preparacao: {
+      data: null,
+    },
+    entrega: {
+      operacao: "Entrega",
+      data: null,
+      local: null,
+    },
+    recolha: {
+      operacao: "Recolha",
+      data: null,
+      local: null,
+    },
+  };
+  newNotionOperation.id = reservation.booking_nr;
+  if (reservation.optionals.extras)
+    reservation.optionals.extras.forEach((extra) => {
+      if (extra.code == "cadeira")
+        newNotionOperation.extras.cadeiras = extra.quantity;
+      if (extra.code == "assento")
+        newNotionOperation.extras.assentos = extra.quantity;
+    });
+  newNotionOperation.cliente.pais = reservation.customer.country;
+  newNotionOperation.cliente.nome = toTitleCase(reservation.customer.name);
+  newNotionOperation.entrega.data = new Date(
+    reservation.pickup_date,
+  ).toISOString();
+  let lavagemData = new Date(reservation.pickup_date);
+  lavagemData.setHours(lavagemData.getHours() - 1);
+  lavagemData = lavagemData.toISOString();
+  newNotionOperation.preparacao.data = lavagemData;
+  newNotionOperation.recolha.data = new Date(
+    reservation.dropoff_date,
+  ).toISOString();
+  newNotionOperation.entrega.local =
+    localTranslator[reservation.pickup_station];
+  newNotionOperation.recolha.local =
+    localTranslator[reservation.dropoff_station];
+  newNotionOperation.grupo = vehicleTranslator[reservation.group];
+  newNotionOperation.anyrent =
+    "https://achieverac.s12.anyrent.pt/app/jedeye/anyrent/reservations/update/" +
+    newNotionOperation.id;
+  newNotionOperation.cliente.whatsapp = reservation.customer.phone.replaceAll(
+    " ",
+    "",
+  );
+  newNotionOperation.voo = reservation.departure_flight;
+  return newNotionOperation;
+}
+
 // Função para atualizar as kilometragens das viaturas
 async function updateVehicles() {
   let vehicles = await axios.get(
@@ -77,45 +166,7 @@ app.post("/add", async (req, res) => {
     .then((response) => {
       // Se existir, cria tres novas linhas na base de dados notion (lavagem, entrega e recolha)
       let reservation = response.data;
-      //console.log(reservation);
-
-      let localTranslator = {
-        aeroporto: "Aeroporto",
-        funchal: "Funchal",
-        "santa-cruz": "Santa Cruz",
-        "porto-moniz": "Porto Moniz",
-        "sao-vicente": "São Vicente",
-        santana: "Santana",
-        calheta: "Calheta",
-        "ponta-do-sol": "Ponta do Sol",
-        "ribeira-brava": "Ribeira Brava",
-        "camara-de-lobos": "Câmara de Lobos",
-        machico: "Machico",
-        canico: "Caniço",
-      };
-
-      let vehicleTranslator = {
-        a1: "Panda",
-        a2: "Up",
-        a3: "500",
-        b1: "Spacestar",
-        c1: "Clio",
-        c2: "Sandero",
-      };
-
-      let cadeiras = 0;
-      let assentos = 0;
-      if (reservation.optionals.extras)
-        reservation.optionals.extras.forEach((extra) => {
-          if (extra.code == "cadeira") cadeiras = extra.quantity;
-          if (extra.code == "assento") assentos = extra.quantity;
-        });
-
-      let locale = reservation.customer.country;
-      let name = toTitleCase(reservation.customer.name);
-
-      let prepareDate = new Date(reservation.pickup_date);
-      prepareDate.setHours(prepareDate.getHours() - 1);
+      let formattedBooking = formatReservation(reservation);
 
       (async () => {
         let preparacao = await notion.pages.create({
@@ -129,7 +180,7 @@ app.post("/add", async (req, res) => {
               title: [
                 {
                   type: "text",
-                  text: { content: "#" + reservation.booking_nr },
+                  text: { content: "#" + formattedBooking.id },
                 },
               ],
             },
@@ -139,12 +190,12 @@ app.post("/add", async (req, res) => {
             },
             Grupo: {
               type: "select",
-              select: { name: vehicleTranslator[reservation.group] },
+              select: { name: formattedBooking.grupo },
             },
             Data: {
               type: "date",
               date: {
-                start: prepareDate.toISOString(),
+                start: formattedBooking.preparacao.data,
                 time_zone: "Atlantic/Madeira",
               },
             },
@@ -156,15 +207,15 @@ app.post("/add", async (req, res) => {
               type: "url",
               url:
                 "https://achieverac.s12.anyrent.pt/app/jedeye/anyrent/reservations/update/" +
-                reservation.booking_nr,
+                formattedBooking.id,
             },
             Cadeiras: {
               type: "number",
-              number: cadeiras,
+              number: formattedBooking.extras.cadeiras ?? 0,
             },
             Assentos: {
               type: "number",
-              number: assentos,
+              number: formattedBooking.extras.assentos ?? 0,
             },
           },
         });
@@ -180,7 +231,7 @@ app.post("/add", async (req, res) => {
               title: [
                 {
                   type: "text",
-                  text: { content: "#" + reservation.booking_nr },
+                  text: { content: "#" + formattedBooking.id },
                 },
               ],
             },
@@ -190,52 +241,52 @@ app.post("/add", async (req, res) => {
             },
             Grupo: {
               type: "select",
-              select: { name: vehicleTranslator[reservation.group] },
+              select: { name: formattedBooking.grupo },
             },
             Data: {
               type: "date",
               date: {
-                start: new Date(reservation.pickup_date).toISOString(),
+                start: formattedBooking.entrega.data,
                 time_zone: "Atlantic/Madeira",
               },
             },
             Local: {
               type: "select",
-              select: { name: localTranslator[reservation.pickup_station] },
+              select: { name: formattedBooking.entrega.local },
             },
             Anyrent: {
               type: "url",
               url:
                 "https://achieverac.s12.anyrent.pt/app/jedeye/anyrent/reservations/update/" +
-                reservation.booking_nr,
+                formattedBooking.id,
             },
             Whatsapp: {
               type: "rich_text",
               rich_text: [
-                { type: "text", text: { content: reservation.customer.phone } },
+                { type: "text", text: { content: formattedBooking.cliente.whatsapp } },
               ],
             },
             Voo: {
               type: "rich_text",
               rich_text: [
-                { type: "text", text: { content: reservation.arrival_flight } },
+                { type: "text", text: { content: formattedBooking.voo } },
               ],
             },
             Cadeiras: {
               type: "number",
-              number: cadeiras,
+              number: formattedBooking.extras.cadeiras,
             },
             Assentos: {
               type: "number",
-              number: assentos,
+              number: formattedBooking.extras.assentos,
             },
             País: {
               type: "rich_text",
-              rich_text: [{ type: "text", text: { content: locale } }],
+              rich_text: [{ type: "text", text: { content: formattedBooking.cliente.pais } }],
             },
             Cliente: {
               type: "rich_text",
-              rich_text: [{ type: "text", text: { content: name } }],
+              rich_text: [{ type: "text", text: { content: formattedBooking.cliente.nome } }],
             },
           },
         });
@@ -251,7 +302,7 @@ app.post("/add", async (req, res) => {
               title: [
                 {
                   type: "text",
-                  text: { content: "#" + reservation.booking_nr },
+                  text: { content: "#" + formattedBooking.id },
                 },
               ],
             },
@@ -261,55 +312,46 @@ app.post("/add", async (req, res) => {
             },
             Grupo: {
               type: "select",
-              select: { name: vehicleTranslator[reservation.group] },
+              select: { name: formattedBooking.grupo },
             },
             Data: {
               type: "date",
               date: {
-                start: new Date(reservation.dropoff_date).toISOString(),
+                start: formattedBooking.recolha.data,
                 time_zone: "Atlantic/Madeira",
               },
             },
             Local: {
               type: "select",
-              select: { name: localTranslator[reservation.dropoff_station] },
+              select: { name: formattedBooking.recolha.local },
             },
             Anyrent: {
               type: "url",
               url:
                 "https://achieverac.s12.anyrent.pt/app/jedeye/anyrent/reservations/update/" +
-                reservation.booking_nr,
+                formattedBooking.id,
             },
             Whatsapp: {
               type: "rich_text",
               rich_text: [
-                { type: "text", text: { content: reservation.customer.phone } },
-              ],
-            },
-            Voo: {
-              type: "rich_text",
-              rich_text: [
-                {
-                  type: "text",
-                  text: { content: reservation.departure_flight },
-                },
+                { type: "text", text: { content: formattedBooking.cliente.whatsapp } },
               ],
             },
             Cadeiras: {
               type: "number",
-              number: cadeiras,
+              number: formattedBooking.extras.cadeiras,
             },
             Assentos: {
               type: "number",
-              number: assentos,
+              number: formattedBooking.extras.assentos,
             },
             País: {
               type: "rich_text",
-              rich_text: [{ type: "text", text: { content: locale } }],
+              rich_text: [{ type: "text", text: { content: formattedBooking.cliente.pais } }],
             },
             Cliente: {
               type: "rich_text",
-              rich_text: [{ type: "text", text: { content: name } }],
+              rich_text: [{ type: "text", text: { content: formattedBooking.cliente.nome } }],
             },
           },
         });
