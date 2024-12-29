@@ -1,7 +1,15 @@
 // EMAIL AND SERVER
 const express = require("express");
 const bodyParser = require("body-parser");
+const cors = require("cors");
 const app = express();
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Replace with your Vite app's URL
+    methods: ["GET", "POST", "PUT", "DELETE"], // Allow necessary HTTP methods
+    allowedHeaders: ["Content-Type", "Authorization"], // Allow necessary headers
+  })
+);
 app.use(bodyParser.json());
 require("dotenv").config();
 
