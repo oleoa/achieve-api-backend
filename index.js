@@ -1,7 +1,14 @@
 // EMAIL AND SERVER
 const express = require("express");
 const bodyParser = require("body-parser");
+const cors = require("cors");
 const app = express();
+app.use(
+  cors({
+    origin: "https://achieve-api.netlify.app", // Replace with your Vite app's URL
+    methods: ["GET", "POST"], // Allow necessary HTTP methods
+  })
+);
 app.use(bodyParser.json());
 require("dotenv").config();
 
@@ -40,38 +47,38 @@ function formatReservation(reservation) {
   let vehicleTranslator = {
     a1: "Panda",
     a2: "Up",
-    a3: "5null",
+    a3: "500",
     b1: "Spacestar",
     c1: "Clio",
     c2: "Sandero",
   };
 
   const newNotionOperation = {
-    id: null,
-    grupo: null,
-    anyrent: null,
-    voo: null,
+    id: "",
+    grupo: "",
+    anyrent: "",
+    voo: "",
     extras: {
-      cadeiras: null,
-      assentos: null,
+      cadeiras: 0,
+      assentos: 0,
     },
     cliente: {
-      nome: null,
-      pais: null,
-      whatsapp: null,
+      nome: "",
+      pais: "",
+      whatsapp: "",
     },
     preparacao: {
-      data: null,
+      data: "",
     },
     entrega: {
       operacao: "Entrega",
-      data: null,
-      local: null,
+      data: "",
+      local: "",
     },
     recolha: {
       operacao: "Recolha",
-      data: null,
-      local: null,
+      data: "",
+      local: "",
     },
   };
   newNotionOperation.id = reservation.booking_nr;
@@ -106,7 +113,7 @@ function formatReservation(reservation) {
     " ",
     "",
   );
-  newNotionOperation.voo = reservation.departure_flight;
+  newNotionOperation.voo = reservation.arrival_flight;
   return newNotionOperation;
 }
 
@@ -167,9 +174,9 @@ app.post("/add", async (req, res) => {
       // Se existir, cria tres novas linhas na base de dados notion (lavagem, entrega e recolha)
       let reservation = response.data;
       let formattedBooking = formatReservation(reservation);
-
-      (async () => {
-        let preparacao = await notion.pages.create({
+      
+       (async () => {
+         let preparacao = await notion.pages.create({
           parent: {
             type: "database_id",
             database_id: "7107291622514df2ac798e53e3291541",
@@ -211,11 +218,11 @@ app.post("/add", async (req, res) => {
             },
             Cadeiras: {
               type: "number",
-              number: formattedBooking.extras.cadeiras ?? 0,
+              number: formattedBooking.extras.cadeiras,
             },
             Assentos: {
               type: "number",
-              number: formattedBooking.extras.assentos ?? 0,
+              number: formattedBooking.extras.assentos,
             },
           },
         });
@@ -364,7 +371,7 @@ app.post("/add", async (req, res) => {
   // Vai buscar pela kilometragem dos carros
   updateVehicles();
 
-  res.status(200).send("Reserva recebida com sucesso! " + idReserva);
+  res.status(200).json({ message: "Reserva "+idReserva+" adicionada com sucesso!" });
 });
 
 // Rota para recalcular e inserir no notion as kilometragens dos carros
@@ -372,7 +379,7 @@ app.get("/vehicles", async (req, res) => {
   // Vai buscar pela kilometragem dos carros
   updateVehicles();
 
-  res.status(200).send("Veículos atualizados com sucesso!");
+  res.status(200).json({message: "Veículos atualizados com sucesso!"});
 });
 
 // Rota que verifica as reservas no anyrent a procura de uma não tratada
